@@ -1,0 +1,16 @@
+{
+  "name": "네이버 블로그 자동 작성",
+  "short_name": "블로그자동화",
+  "description": "세차·디테일링 전문가용 AI 블로그 생성기",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#ffffff",
+  "theme_color": "#2563eb",
+  "icons": [
+    {
+      "src": "/icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml"
+    }
+  ]
+}
