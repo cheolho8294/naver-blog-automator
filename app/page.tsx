@@ -51,11 +51,15 @@ export default function Home() {
       setPost(await res.json());
     } catch (e) {
       const msg = e instanceof Error ? e.message : "";
-      setError(
-        msg === "parse_failed"
-          ? "AI 응답을 읽지 못했습니다. 다시 시도해주세요."
-          : "글 생성 중 오류가 발생했습니다. 다시 시도해주세요."
-      );
+      if (msg === "rate_limited") {
+        setError("요청이 너무 빠릅니다. 10초 후 다시 시도해주세요.");
+      } else if (msg === "parse_failed") {
+        setError("AI 응답을 읽지 못했습니다. 다시 시도해주세요.");
+      } else if (msg.includes("Failed to fetch") || msg.includes("413")) {
+        setError("사진 용량이 커서 전송에 실패했습니다. 2~3장 줄여 다시 시도해주세요.");
+      } else {
+        setError("글 생성 중 오류가 발생했습니다. 다시 시도해주세요.");
+      }
     } finally {
       setLoading(false);
     }

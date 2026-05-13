@@ -23,6 +23,15 @@ interface Props {
 }
 
 const VISION_TYPES = ["image/jpeg", "image/png", "image/webp"];
+const MAX_IMAGES = 20;
+const PAYLOAD_BUDGET = 3.8 * 1024 * 1024; // Vercel 4.5MB 한도 안전 마진
+const COMPRESS_OPTS = {
+  maxSizeMB: 0.2,
+  maxWidthOrHeight: 1024,
+  fileType: "image/webp",
+  useWebWorker: true,
+  initialQuality: 0.8,
+};
 
 function isStaticImage(file: File) {
   return VISION_TYPES.includes(file.type);
@@ -80,40 +89,31 @@ export default function InputForm({ onSubmit, loading }: Props) {
 
     const warnings: string[] = [];
     let selected = staticImages;
-    if (selected.length > 8) {
-      warnings.push(`사진이 많아 앞 8장만 분석합니다 (총 ${selected.length}장).`);
-      selected = selected.slice(0, 8);
+    if (selected.length > MAX_IMAGES) {
+      warnings.push(`사진이 많아 앞 ${MAX_IMAGES}장만 분석합니다 (총 ${selected.length}장).`);
+      selected = selected.slice(0, MAX_IMAGES);
     }
 
     setAutoFilling(true);
     try {
       const prepared: { dataUrl: string; mimeType: string; filename: string }[] = [];
-      const oversized: string[] = [];
       let totalBytes = 0;
       for (const m of selected) {
-        const compressed = await imageCompression(m.file, {
-          maxSizeMB: 4,
-          maxWidthOrHeight: 1568,
-        });
-        if (compressed.size > 5 * 1024 * 1024) {
-          oversized.push(m.file.name);
-          continue;
-        }
+        const compressed = await imageCompression(m.file, COMPRESS_OPTS);
         const dataUrl = await fileToDataUrl(compressed);
         totalBytes += dataUrl.length;
         prepared.push({ dataUrl, mimeType: compressed.type, filename: m.file.name });
       }
 
-      if (oversized.length > 0) {
-        warnings.push(`용량 초과로 제외: ${oversized.join(", ")}`);
-      }
       if (prepared.length === 0) {
         setAutoFillError("분석 가능한 사진이 없습니다.");
         setAutoFilling(false);
         return;
       }
-      if (totalBytes > 25 * 1024 * 1024) {
-        setAutoFillError("사진 용량이 너무 큽니다. 몇 장 제외하고 다시 시도하세요.");
+      if (totalBytes > PAYLOAD_BUDGET) {
+        setAutoFillError(
+          `사진 합계 용량(${(totalBytes / 1024 / 1024).toFixed(1)}MB)이 전송 한도를 넘었어요. 2~3장 빼고 다시 시도해주세요.`
+        );
         setAutoFilling(false);
         return;
       }
@@ -132,6 +132,8 @@ export default function InputForm({ onSubmit, loading }: Props) {
         const err = await res.json().catch(() => ({}));
         if (err.error === "parse_failed") {
           setAutoFillError("사진 분석 결과를 읽지 못했습니다. 다시 시도해주세요.");
+        } else if (err.error === "rate_limited") {
+          setAutoFillError("요청이 너무 빠릅니다. 10초 후 다시 시도해주세요.");
         } else {
           setAutoFillError("자동 채우기 실패. 다시 시도해주세요.");
         }
@@ -168,35 +170,28 @@ export default function InputForm({ onSubmit, loading }: Props) {
 
     const warnings: string[] = [];
     let selected = staticImages;
-    if (selected.length > 13) {
-      warnings.push(`사진이 많아 앞 13장만 사용합니다 (총 ${selected.length}장).`);
-      selected = selected.slice(0, 13);
+    if (selected.length > MAX_IMAGES) {
+      warnings.push(`사진이 많아 앞 ${MAX_IMAGES}장만 사용합니다 (총 ${selected.length}장).`);
+      selected = selected.slice(0, MAX_IMAGES);
     }
 
     const preparedImages: { dataUrl: string; mimeType: string; originalIndex: number }[] = [];
-    const oversized: string[] = [];
     let totalBytes = 0;
     for (const { m, originalIndex } of selected) {
-      const compressed = await imageCompression(m.file, {
-        maxSizeMB: 4,
-        maxWidthOrHeight: 1568,
-      });
-      if (compressed.size > 5 * 1024 * 1024) {
-        oversized.push(m.file.name);
-        continue;
-      }
+      const compressed = await imageCompression(m.file, COMPRESS_OPTS);
       const dataUrl = await fileToDataUrl(compressed);
       totalBytes += dataUrl.length;
       preparedImages.push({ dataUrl, mimeType: compressed.type, originalIndex });
     }
 
-    if (oversized.length > 0) warnings.push(`용량 초과로 제외: ${oversized.join(", ")}`);
     if (preparedImages.length === 0) {
       setSubmitWarning("전송 가능한 사진이 없습니다.");
       return;
     }
-    if (totalBytes > 25 * 1024 * 1024) {
-      setSubmitWarning("사진 용량이 너무 큽니다. 몇 장 제외하고 다시 시도하세요.");
+    if (totalBytes > PAYLOAD_BUDGET) {
+      setSubmitWarning(
+        `사진 합계 용량(${(totalBytes / 1024 / 1024).toFixed(1)}MB)이 전송 한도를 넘었어요. 사진을 2~3장 빼고 다시 시도해주세요.`
+      );
       return;
     }
 

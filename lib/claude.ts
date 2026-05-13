@@ -97,6 +97,7 @@ const DIA_SYSTEM_PROMPT = `당신은 세차·디테일링 전문가의 네이버
 - imagePlan.ordered의 각 사진에 groupId(1부터) 부여
 - 같은 groupId끼리 같은 그룹으로 묶임
 - order는 전체에서 1부터 증가(그룹 경계와 무관)
+- 한 섹션에 그룹 1~3개 배치 가능 (사진이 많으면 여러 그룹으로 나눠 적절히 분산)
 
 [이미지 큐레이션]
 - 사진은 "[원본N]" 라벨과 함께 제공됨. N은 0부터 시작하는 originalIndex

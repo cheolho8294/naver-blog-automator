@@ -30,7 +30,7 @@ export async function POST(req: NextRequest) {
 
     const parsed = images
       .filter((img) => ALLOWED.includes(img.mimeType as VisionMediaType))
-      .slice(0, 13)
+      .slice(0, 20)
       .map((img) => {
         const comma = img.dataUrl.indexOf(",");
         const base64 = comma >= 0 ? img.dataUrl.slice(comma + 1) : img.dataUrl;
