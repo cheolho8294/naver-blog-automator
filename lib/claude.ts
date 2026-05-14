@@ -1,6 +1,14 @@
 import Anthropic from "@anthropic-ai/sdk";
 
-const client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
+/** Anthropic 공식 API 호스트 고정(API 프록시용 `ANTHROPIC_BASE_URL` 미사용) */
+function anthropicOfficial(): Anthropic {
+  return new Anthropic({
+    apiKey: process.env.ANTHROPIC_API_KEY,
+    baseURL: "https://api.anthropic.com",
+  });
+}
+
+const client = anthropicOfficial();
 
 const SYSTEM_PROMPT = `당신은 네이버 블로그 전문 작가입니다. 세차·디테일링·광택 전문가의 1인칭 경험담을 작성합니다.
 
@@ -34,14 +42,14 @@ const SYSTEM_PROMPT = `당신은 네이버 블로그 전문 작가입니다. 세
 }`;
 
 const AUTOFILL_SYSTEM_PROMPT = `당신은 세차·디테일링 전문가의 블로그 입력폼을 채워주는 어시스턴트입니다.
-사용자가 업로드한 사진을 분석하여 4개 필드를 추론합니다.
+사용자가 업로드한 사진(및 각 사진에 붙인 짧은 메모)을 분석하여 4개 필드를 추론합니다.
 
 [규칙]
 - 사용자가 이미 입력한 필드는 절대 덮어쓰지 말고 빈 문자열("")로 반환
-- 비어있는 필드만 사진과 이미 채워진 필드를 근거로 추론
+- 비어있는 필드만 사진·사진별 메모·이미 채워진 필드를 근거로 추론
 - topic: 시공/작업의 구체적 주제 한 줄 (예: "벤츠 E클래스 세라믹 코팅 시공")
 - keywords: 쉼표로 구분된 검색 키워드 5개 내외
-- notes: 1인칭으로 "느낀 경험" 2~3줄. 사진에서 보이는 디테일(광택, 물비침, 오염, 스월마크, 작업 도구 등)을 근거로
+- notes: 1인칭. "현장 순서·압력/속도감·걸린 시간감·다시 할 때 주의점"처럼 독자가 따라 할 수 있는 노하우 중심 3~6줄. 사진 디테일(광택, 물비침, 오염, 스월마크, 도구)과 사진 메모를 근거로
 - comparison: "시공 전 vs 시공 후" 또는 "기존 제품 vs 이번 제품" 형태
 - 사진에 안 보이는 정보는 추측하지 말고 일반적 표현 사용
 - 반드시 유효한 JSON만 출력. 그 외 텍스트 금지
@@ -70,10 +78,16 @@ const DIA_SYSTEM_PROMPT = `당신은 세차·디테일링 전문가의 네이버
 - 경험성: 1인칭, 오감 디테일(냄새, 촉감, 소리, 질감), 실제 수행한 구체 동작
 - 정보성: 가격(원), 시간(분/시간), 제품명, 지속 예상(개월), 수치 필수
 - 전문성: 아이언바, IPA, 오비탈 폴리셔, 클레이바, 스월마크 등 용어 자연스럽게 (괄호로 풀이)
-- 체류시간: 첫 문단 훅(질문/반전), 문단 끝마다 호기심 갭, 1500자 이상, 소제목 4개
+- 체류시간: 첫 문단 훅(질문/반전), 문단 끝마다 호기심 갭, 1800자 이상 권장(최소 1500자), 소제목 4개
 - 검색의도: 제목·소제목에 핵심키워드 자연 포함
 - 맥락성: 도입부에 차종/상태 소개, 결론에 해소
-- 독창성: 사진에서 실제 관찰된 디테일만 사용, 일반론 금지
+- 독창성: 사진과 작성자 코멘트에서 실제 관찰·팁 반영; 코멘트 없는 장면도 과장 추측은 금지
+
+[현장 노하우 — 사용자 입력·사진 코멘트 우선]
+- 사용자「내 경험 메모」「비교 대상」「사진별 코멘트」를 일반론으로 희석하지 말고, 절차·순서·주의 포인트로 본문에 녹임
+- 각 소제목마다 최소 1개: 실무 팁 또는 실수 방지
+- 「먼저 ~ 하고 나서 ~」처럼 단계가 보이게 서술 (단서 부족 시 합리적 일반 순서만)
+- 시간·압력·패드·온도·건조 간격 등 손으로 조절되는 변수는 사용자가 준 수치·표현을 우선
 
 [제목 규칙]
 - 핵심 키워드를 제목 앞쪽
@@ -181,7 +195,7 @@ ${params.imageCaptions.length > 0 ? `사진 설명:\n${params.imageCaptions.map(
 
   const response = await client.messages.create({
     model: "claude-sonnet-4-6",
-    max_tokens: 4096,
+    max_tokens: 6144,
     system: [
       {
         type: "text",
@@ -199,11 +213,19 @@ ${params.imageCaptions.length > 0 ? `사진 설명:\n${params.imageCaptions.map(
 }
 
 export async function analyzeImagesForAutoFill(params: {
-  images: { base64: string; mediaType: VisionMediaType }[];
+  images: { base64: string; mediaType: VisionMediaType; caption?: string }[];
   nonImageFilenames: string[];
   prefilled: AutoFillResult;
 }): Promise<AutoFillResult> {
   const { images, nonImageFilenames, prefilled } = params;
+
+  const captionHint =
+    images
+      .map((img, seq) =>
+        img.caption?.trim() ? `${seq + 1}번째 사진 코멘트: ${img.caption.trim()}` : null,
+      )
+      .filter(Boolean)
+      .join("\n") || "(사진별 코멘트 없음)";
 
   const promptText = `[이미 입력된 필드 — 덮어쓰지 말 것]
 topic: ${prefilled.topic || "(비어있음)"}
@@ -211,19 +233,27 @@ keywords: ${prefilled.keywords || "(비어있음)"}
 notes: ${prefilled.notes || "(비어있음)"}
 comparison: ${prefilled.comparison || "(비어있음)"}
 
+[업로드 순서별 작성자 코멘트 — 가능하면 notes 등에 녹임]
+${captionHint}
+
 [추가 파일(분석 불가, 참고용)]
 ${nonImageFilenames.join(", ") || "없음"}
 
 빈 필드만 채워서 JSON으로 반환.`;
 
-  const imageBlocks = images.map((img) => ({
-    type: "image" as const,
-    source: {
-      type: "base64" as const,
-      media_type: img.mediaType,
-      data: img.base64,
+  const imageBlocks = images.flatMap((img) => [
+    ...(img.caption?.trim()
+      ? ([{ type: "text" as const, text: `[이미지 업로드 순서 — 작성자 코멘트]\n${img.caption.trim()}` }] as const)
+      : []),
+    {
+      type: "image" as const,
+      source: {
+        type: "base64" as const,
+        media_type: img.mediaType,
+        data: img.base64,
+      },
     },
-  }));
+  ]);
 
   const response = await client.messages.create({
     model: "claude-sonnet-4-6",
@@ -254,7 +284,12 @@ export async function generateBlogPostWithImages(params: {
   keywords: string;
   notes: string;
   comparison: string;
-  images: { base64: string; mediaType: VisionMediaType; originalIndex: number }[];
+  images: {
+    base64: string;
+    mediaType: VisionMediaType;
+    originalIndex: number;
+    caption?: string;
+  }[];
 }): Promise<BlogPostWithImages> {
   const { topic, keywords, notes, comparison, images } = params;
 
@@ -264,7 +299,11 @@ export async function generateBlogPostWithImages(params: {
   )[] = [];
 
   for (const img of images) {
-    interleaved.push({ type: "text", text: `[원본${img.originalIndex}]` });
+    const cap = img.caption?.trim();
+    interleaved.push({
+      type: "text",
+      text: `[원본${img.originalIndex}]${cap ? `\n작성자 사진 코멘트: ${cap}` : ""}`,
+    });
     interleaved.push({
       type: "image",
       source: { type: "base64", media_type: img.mediaType, data: img.base64 },
@@ -276,15 +315,16 @@ export async function generateBlogPostWithImages(params: {
     text: `[폼 입력]
 주제: ${topic}
 키워드: ${keywords}
-내 경험 메모: ${notes || "(없음 — 사진에서 추론)"}
-비교 대상: ${comparison || "(없음 — 사진에서 추론)"}
+내 경험 메모: ${notes || "(없음 — 사진과 코멘트에서 추론)"}
+비교 대상: ${comparison || "(없음 — 사진과 코멘트에서 추론)"}
 
-위 사진들을 큐레이션하고 본문에 [order] 마커를 삽입해 JSON으로 반환.`,
+위 내용과 사진별 코멘트의 노하우를 본문에 절차·팁으로 살려 쓸 것.
+사진 큐레이션 후 본문에 그룹 마커 [G1],[G2],… 형식만 사용해 JSON으로 반환.`,
   });
 
   const response = await client.messages.create({
     model: "claude-sonnet-4-6",
-    max_tokens: 4096,
+    max_tokens: 6144,
     system: [
       {
         type: "text",

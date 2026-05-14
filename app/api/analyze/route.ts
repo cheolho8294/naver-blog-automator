@@ -17,7 +17,7 @@ export async function POST(req: NextRequest) {
   try {
     const body = await req.json();
     const { images, nonImageFilenames = [], prefilled } = body as {
-      images: { dataUrl: string; mimeType: string; filename: string }[];
+      images: { dataUrl: string; mimeType: string; filename: string; caption?: string }[];
       nonImageFilenames: string[];
       prefilled: { topic: string; keywords: string; notes: string; comparison: string };
     };
@@ -31,7 +31,8 @@ export async function POST(req: NextRequest) {
       .map((img) => {
         const comma = img.dataUrl.indexOf(",");
         const base64 = comma >= 0 ? img.dataUrl.slice(comma + 1) : img.dataUrl;
-        return { base64, mediaType: img.mimeType as VisionMediaType };
+        const cap = typeof img.caption === "string" ? img.caption.trim() : "";
+        return { base64, mediaType: img.mimeType as VisionMediaType, caption: cap || undefined };
       });
 
     if (parsed.length === 0) {

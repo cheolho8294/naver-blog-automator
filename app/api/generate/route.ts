@@ -18,7 +18,7 @@ export async function POST(req: NextRequest) {
     const body = await req.json();
     const { form, images } = body as {
       form: { topic: string; keywords: string; notes: string; comparison: string };
-      images: { dataUrl: string; mimeType: string; originalIndex: number }[];
+      images: { dataUrl: string; mimeType: string; originalIndex: number; caption?: string }[];
     };
 
     if (!form?.topic || !form?.keywords) {
@@ -34,10 +34,12 @@ export async function POST(req: NextRequest) {
       .map((img) => {
         const comma = img.dataUrl.indexOf(",");
         const base64 = comma >= 0 ? img.dataUrl.slice(comma + 1) : img.dataUrl;
+        const cap = typeof img.caption === "string" ? img.caption.trim() : "";
         return {
           base64,
           mediaType: img.mimeType as VisionMediaType,
           originalIndex: img.originalIndex,
+          ...(cap ? { caption: cap } : {}),
         };
       });
 

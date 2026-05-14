@@ -14,7 +14,7 @@ interface FormData {
   notes: string;
   comparison: string;
   media: MediaFile[];
-  preparedImages: { dataUrl: string; mimeType: string; originalIndex: number }[];
+  preparedImages: { dataUrl: string; mimeType: string; originalIndex: number; caption?: string }[];
 }
 
 interface Props {
@@ -96,13 +96,24 @@ export default function InputForm({ onSubmit, loading }: Props) {
 
     setAutoFilling(true);
     try {
-      const prepared: { dataUrl: string; mimeType: string; filename: string }[] = [];
+      const prepared: {
+        dataUrl: string;
+        mimeType: string;
+        filename: string;
+        caption?: string;
+      }[] = [];
       let totalBytes = 0;
       for (const m of selected) {
         const compressed = await imageCompression(m.file, COMPRESS_OPTS);
         const dataUrl = await fileToDataUrl(compressed);
         totalBytes += dataUrl.length;
-        prepared.push({ dataUrl, mimeType: compressed.type, filename: m.file.name });
+        const caption = (m.caption ?? "").trim();
+        prepared.push({
+          dataUrl,
+          mimeType: compressed.type,
+          filename: m.file.name,
+          ...(caption ? { caption } : {}),
+        });
       }
 
       if (prepared.length === 0) {
@@ -175,13 +186,24 @@ export default function InputForm({ onSubmit, loading }: Props) {
       selected = selected.slice(0, MAX_IMAGES);
     }
 
-    const preparedImages: { dataUrl: string; mimeType: string; originalIndex: number }[] = [];
+    const preparedImages: {
+      dataUrl: string;
+      mimeType: string;
+      originalIndex: number;
+      caption?: string;
+    }[] = [];
     let totalBytes = 0;
     for (const { m, originalIndex } of selected) {
       const compressed = await imageCompression(m.file, COMPRESS_OPTS);
       const dataUrl = await fileToDataUrl(compressed);
       totalBytes += dataUrl.length;
-      preparedImages.push({ dataUrl, mimeType: compressed.type, originalIndex });
+      const caption = (m.caption ?? "").trim();
+      preparedImages.push({
+        dataUrl,
+        mimeType: compressed.type,
+        originalIndex,
+        ...(caption ? { caption } : {}),
+      });
     }
 
     if (preparedImages.length === 0) {
@@ -230,7 +252,7 @@ export default function InputForm({ onSubmit, loading }: Props) {
         <label className="mb-1 block text-sm font-semibold text-gray-700">내 경험 메모</label>
         <textarea
           className={`${inputCls} min-h-[120px] resize-none`}
-          placeholder="작업 과정, 느낀 점, 특이사항 등 자유롭게 적어주세요"
+          placeholder="프리워시 후 투버킷, 패드는 오렌지부터… 등 현장 순서·느낌을 구체적으로 적으면 글에 더 잘 살아납니다"
           value={form.notes}
           onChange={(e) => setForm({ ...form, notes: e.target.value })}
         />
@@ -275,7 +297,7 @@ export default function InputForm({ onSubmit, loading }: Props) {
                 <div className="flex flex-1 flex-col gap-1">
                   <input
                     className="rounded-lg border border-gray-200 px-3 py-1.5 text-xs"
-                    placeholder="사진 설명 (선택)"
+                    placeholder="사진 설명 · 현장 팁(순서·압력·주의점 등) — AI 반영"
                     value={m.caption}
                     onChange={(e) => updateCaption(i, e.target.value)}
                   />

@@ -25,7 +25,7 @@ export default function Home() {
     notes: string;
     comparison: string;
     media: MediaFile[];
-    preparedImages: { dataUrl: string; mimeType: string; originalIndex: number }[];
+    preparedImages: { dataUrl: string; mimeType: string; originalIndex: number; caption?: string }[];
   }) {
     setLoading(true);
     setError("");
