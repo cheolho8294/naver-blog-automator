@@ -8,7 +8,8 @@
   "scripts": {
     "dev": "next dev",
     "build": "next build",
-    "start": "next start"
+    "start": "next start",
+    "sync-blog-prompt": "node scripts/sync-blog-system-prompt.mjs"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.95.2",

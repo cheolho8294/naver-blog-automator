@@ -1,6 +1,6 @@
 import Anthropic from "@anthropic-ai/sdk";
 import { OPENROUTER_KEY_IN_ANTHROPIC_SLOT } from "./anthropicErrors";
-import { loadUtf8FromRoot } from "./promptLoader";
+import { BLOG_SYSTEM_KO_MD } from "./prompts/blogSystemKo";
 import { openRouterChatCompletion } from "./openrouter";
 import type { ResearchHit } from "./research";
 import {
@@ -290,7 +290,7 @@ export async function generateBlogPostWithImages(params: {
   researchHits: ResearchHit[];
 }): Promise<BlogPostWithImages> {
   const { form, images, allowedOriginalIndices, researchHits } = params;
-  const systemBase = loadUtf8FromRoot("prompts/system.ko.md");
+  const systemBase = BLOG_SYSTEM_KO_MD;
 
   const researchBlock =
     researchHits.length === 0
