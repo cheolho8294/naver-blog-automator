@@ -196,8 +196,39 @@ export function validateImagePlanAgainstInputs(
   return null;
 }
 
+/**
+ * imagePlan.section은 앱·포맷터에서 sections 배열의 0-based 인덱스다.
+ * 모델이 소제목 번호(1-based)로 넣는 경우가 많아 보정한다.
+ */
+function normalizeImagePlanSections(data: AiBlogJson): void {
+  const n = data.sections.length;
+  const rows = data.imagePlan.ordered;
+  if (rows.length === 0 || n <= 0) return;
+
+  const secs = rows.map((r) => r.section);
+  const allOneBased =
+    secs.every((s) => s >= 1 && s <= n) && !secs.some((s) => s === 0);
+
+  if (allOneBased) {
+    for (const row of rows) {
+      row.section -= 1;
+    }
+    return;
+  }
+
+  for (const row of rows) {
+    if (row.section < 0 || row.section >= n) {
+      if (row.section >= 1 && row.section <= n) {
+        row.section -= 1;
+      }
+    }
+  }
+}
+
 export function parseAiBlogJson(raw: unknown): AiBlogJson {
-  return aiBlogJsonSchema.parse(raw);
+  const data = aiBlogJsonSchema.parse(raw);
+  normalizeImagePlanSections(data);
+  return data;
 }
 
 export function jsonSchemaInstructions(): string {
@@ -233,6 +264,7 @@ export function jsonSchemaInstructions(): string {
     "- 의도 충족·품질: 제목과 본문 모순 없음. 초행 따라 하기 가능한 수준으로 단계 주의 포함. 스니펫·메모 근거 밖 과장 금지. honestDownsides로 과장만 보완되는지 점검.",
     "- 사진 슬롯은 본문에 [G1] 형태 문자열로 표시.",
     "- imagePlan: 각 groupId별 ordered 행 개수는 반드시 2 또는 4 (2열·2×2 콜라주용).",
+    "- imagePlan.ordered[].section은 sections 배열의 **0부터** 인덱스(첫 소제목=0, 둘째=1, …). 소제목 번호와 같이 1부터 쓰지 말 것.",
     "- 업로드가 8장 이상이면 ordered 장수는 8~13(업로드보다 적으면 min) 중 짝수만 가능하다(2·4장 묶음 합).",
     "- tableHtml은 근거가 있을 때만. 없으면 빈 문자열.",
     "- 공백·HTML 태그·[Gn] 마커 제외 문자 합계(제목·요약·tags·본문·FAQ 등) 최소 **" +

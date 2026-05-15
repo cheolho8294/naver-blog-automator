@@ -66,7 +66,7 @@
 7. **comparisonBlock**: 이전 vs 이번을 분명히 비교한다(짧은 줄·적당한 공백).
 8. **faq**: 검색 의도에 맞는 질문 2개 이상.
 9. **engagement**: 댓글 유도 질문, 저장 멘트, 관련 글 자리(slug만).
-10. **imagePlan**: **originalIndex**는 프롬프트에 제시된 허용 값만 사용한다.
+10. **imagePlan**: **originalIndex**는 프롬프트에 제시된 허용 값만 사용한다. **section**은 `sections` 배열의 **0부터** 인덱스(예: 소제목1→0, 마지막 소제목→`sections` 개수−1). 사람이 읽는 소제목 번호(1,2,3…)와 혼동하지 않는다.
 
 ## 분량
 
