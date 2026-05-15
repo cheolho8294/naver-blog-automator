@@ -1,9 +1,10 @@
 import { NextRequest, NextResponse } from "next/server";
 import { generateBlogPostWithImages, type VisionMediaType } from "@/lib/claude";
 import { throttle, getIp } from "@/lib/throttle";
+import { tavilySearch } from "@/lib/research";
 
 export const runtime = "nodejs";
-export const maxDuration = 60;
+export const maxDuration = 120;
 
 const ALLOWED: VisionMediaType[] = ["image/jpeg", "image/png", "image/webp"];
 
@@ -41,18 +42,43 @@ export async function POST(req: NextRequest) {
           originalIndex: img.originalIndex,
           ...(cap ? { caption: cap } : {}),
         };
-      });
+      })
+      .sort((a, b) => a.originalIndex - b.originalIndex);
 
     if (parsed.length === 0) {
       return NextResponse.json({ error: "no_valid_images" }, { status: 400 });
     }
 
-    const result = await generateBlogPostWithImages({ ...form, images: parsed });
-    return NextResponse.json(result);
+    const allowedOriginalIndices = parsed.map((p) => p.originalIndex);
+    const visionImages = parsed.map((p) => ({
+      base64: p.base64,
+      mediaType: p.mediaType,
+      originalIndex: p.originalIndex,
+      caption: p.caption,
+    }));
+
+    let researchHits: { title: string; url: string; snippet: string }[] = [];
+    try {
+      const q = `${form.topic} ${form.keywords}`.trim();
+      researchHits = await tavilySearch(q);
+    } catch {
+      researchHits = [];
+    }
+
+    const result = await generateBlogPostWithImages({
+      form,
+      images: visionImages,
+      allowedOriginalIndices,
+      researchHits,
+    });
+
+    return NextResponse.json({ ...result, researchUsed: researchHits.length > 0 });
   } catch (e) {
     const msg = e instanceof Error ? e.message : "unknown";
-    const status = msg.includes("JSON 파싱") ? 502 : 500;
-    const code = status === 502 ? "parse_failed" : "generate_failed";
+    const status =
+      msg.includes("JSON 파싱") || msg.includes("JSON 검증") ? 502 : 500;
+    const code =
+      status === 502 ? "parse_failed" : msg.includes("ANTHROPIC_API_KEY") ? "no_api_key" : "generate_failed";
     return NextResponse.json({ error: code, detail: msg }, { status });
   }
 }

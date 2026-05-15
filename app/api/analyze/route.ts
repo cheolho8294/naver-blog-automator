@@ -16,10 +16,21 @@ export async function POST(req: NextRequest) {
   }
   try {
     const body = await req.json();
-    const { images, nonImageFilenames = [], prefilled } = body as {
-      images: { dataUrl: string; mimeType: string; filename: string; caption?: string }[];
-      nonImageFilenames: string[];
-      prefilled: { topic: string; keywords: string; notes: string; comparison: string };
+    const {
+      images,
+      nonImageFilenames = [],
+      prefilled: prefilledRaw,
+    } = body as {
+      images?: { dataUrl: string; mimeType: string; filename: string; caption?: string }[];
+      nonImageFilenames?: string[];
+      prefilled?: { topic?: string; keywords?: string; notes?: string; comparison?: string };
+    };
+
+    const prefilled = {
+      topic: prefilledRaw?.topic ?? "",
+      keywords: prefilledRaw?.keywords ?? "",
+      notes: prefilledRaw?.notes ?? "",
+      comparison: prefilledRaw?.comparison ?? "",
     };
 
     if (!images || images.length === 0) {
@@ -47,8 +58,20 @@ export async function POST(req: NextRequest) {
     return NextResponse.json(result);
   } catch (e) {
     const msg = e instanceof Error ? e.message : "unknown";
-    const status = msg.includes("JSON 파싱") ? 502 : 500;
-    const code = status === 502 ? "parse_failed" : "analyze_failed";
+    if (msg.includes("ANTHROPIC_API_KEY")) {
+      return NextResponse.json(
+        {
+          error: "no_api_key",
+          detail:
+            "서버에 ANTHROPIC_API_KEY 가 없습니다. 프로젝트 폴더에 .env.local 파일을 만들고 ANTHROPIC_API_KEY=your_key 를 넣은 뒤 개발 서버를 다시 실행하세요.",
+        },
+        { status: 503 }
+      );
+    }
+    const status =
+      msg.includes("JSON 파싱") || msg.includes("자동 채우기 JSON") ? 502 : 500;
+    const code =
+      status === 502 ? "parse_failed" : msg.includes("401") ? "auth_failed" : "analyze_failed";
     return NextResponse.json({ error: code, detail: msg }, { status });
   }
 }

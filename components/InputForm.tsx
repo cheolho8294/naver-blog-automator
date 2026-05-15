@@ -1,6 +1,7 @@
 "use client";
 import { useState, useRef } from "react";
 import imageCompression from "browser-image-compression";
+import { extractVideoFrames, gifFirstFrameAsJpeg } from "@/lib/extractFrames";
 
 interface MediaFile {
   file: File;
@@ -58,15 +59,56 @@ export default function InputForm({ onSubmit, loading }: Props) {
   async function handleFiles(files: FileList) {
     const newMedia: MediaFile[] = [];
     for (const file of Array.from(files)) {
-      const compressed = file.type.startsWith("image/") && file.type !== "image/gif"
-        ? await imageCompression(file, { maxSizeMB: 1, maxWidthOrHeight: 1200 })
-        : file;
+      if (file.type.startsWith("video/")) {
+        try {
+          const frames = await extractVideoFrames(file, 4);
+          for (const frame of frames) {
+            const compressed = await imageCompression(frame, {
+              maxSizeMB: 1,
+              maxWidthOrHeight: 1200,
+            });
+            newMedia.push({
+              file: compressed,
+              preview: URL.createObjectURL(compressed),
+              caption: `${file.name} 영상 프레임`,
+            });
+          }
+        } catch {
+          setSubmitWarning("영상 프레임 추출에 실패했습니다. 다른 파일을 시도해 주세요.");
+        }
+        continue;
+      }
+
+      if (file.type === "image/gif") {
+        try {
+          const jpeg = await gifFirstFrameAsJpeg(file);
+          const compressed = await imageCompression(jpeg, {
+            maxSizeMB: 1,
+            maxWidthOrHeight: 1200,
+          });
+          newMedia.push({
+            file: compressed,
+            preview: URL.createObjectURL(compressed),
+            caption: `${file.name} GIF 첫 프레임`,
+          });
+        } catch {
+          setSubmitWarning("GIF 변환에 실패했습니다. 정지 이미지로 업로드해 주세요.");
+        }
+        continue;
+      }
+
+      const compressed =
+        file.type.startsWith("image/") && file.type !== "image/gif"
+          ? await imageCompression(file, { maxSizeMB: 1, maxWidthOrHeight: 1200 })
+          : file;
       newMedia.push({
         file: compressed,
         preview: URL.createObjectURL(compressed),
         caption: "",
       });
     }
+    if (newMedia.length === 0) return;
+    setSubmitWarning("");
     setMedia((prev) => [...prev, ...newMedia]);
   }
 
@@ -140,13 +182,30 @@ export default function InputForm({ onSubmit, loading }: Props) {
       });
 
       if (!res.ok) {
-        const err = await res.json().catch(() => ({}));
+        const err = (await res.json().catch(() => ({}))) as {
+          error?: string;
+          detail?: string;
+        };
+        const detail = typeof err.detail === "string" ? err.detail : "";
         if (err.error === "parse_failed") {
-          setAutoFillError("사진 분석 결과를 읽지 못했습니다. 다시 시도해주세요.");
+          setAutoFillError(
+            detail || "사진 분석 결과를 읽지 못했습니다. 다시 시도해주세요."
+          );
         } else if (err.error === "rate_limited") {
           setAutoFillError("요청이 너무 빠릅니다. 10초 후 다시 시도해주세요.");
+        } else if (err.error === "no_api_key") {
+          setAutoFillError(
+            detail ||
+              ".env.local 에 ANTHROPIC_API_KEY 를 설정하고 서버를 재시작해 주세요."
+          );
+        } else if (err.error === "auth_failed") {
+          setAutoFillError(
+            detail || "API 키가 거부되었습니다. 키·결제·모델 권한을 확인해 주세요."
+          );
         } else {
-          setAutoFillError("자동 채우기 실패. 다시 시도해주세요.");
+          setAutoFillError(
+            detail || "자동 채우기 실패. 다시 시도해주세요."
+          );
         }
         return;
       }
@@ -249,10 +308,10 @@ export default function InputForm({ onSubmit, loading }: Props) {
       </div>
 
       <div>
-        <label className="mb-1 block text-sm font-semibold text-gray-700">내 경험 메모</label>
+        <label className="mb-1 block text-sm font-semibold text-gray-700">내 경험 메모 (작업하며 느낀 점)</label>
         <textarea
           className={`${inputCls} min-h-[120px] resize-none`}
-          placeholder="프리워시 후 투버킷, 패드는 오렌지부터… 등 현장 순서·느낌을 구체적으로 적으면 글에 더 잘 살아납니다"
+          placeholder="예: 패드를 바꿀 때 열이 너무 올라가지 않게 속도를 줄였습니다. AI 자동 채우기 시 여기가 2~3줄로 제안됩니다."
           value={form.notes}
           onChange={(e) => setForm({ ...form, notes: e.target.value })}
         />
@@ -273,9 +332,9 @@ export default function InputForm({ onSubmit, loading }: Props) {
         <button
           type="button"
           onClick={() => fileRef.current?.click()}
-          className="w-full rounded-xl border-2 border-dashed border-gray-300 py-6 text-sm text-gray-500 hover:border-blue-400 hover:text-blue-500"
+          className="min-h-[52px] w-full rounded-xl border-2 border-dashed border-gray-300 px-3 py-6 text-sm leading-snug text-gray-500 hover:border-blue-400 hover:text-blue-500 sm:py-6"
         >
-          + 파일 추가 (카메라 촬영 가능)
+          + 파일 추가 (모바일 카메라 · 영상은 자동으로 JPEG 프레임 추출)
         </button>
         <input
           ref={fileRef}
@@ -317,7 +376,7 @@ export default function InputForm({ onSubmit, loading }: Props) {
           disabled={autoFilling || !hasStaticImage}
           className="w-full rounded-xl border-2 border-purple-300 bg-purple-50 py-3 text-sm font-bold text-purple-700 hover:bg-purple-100 disabled:opacity-50"
         >
-          {autoFilling ? "🪄 사진 분석 중..." : "🪄 AI 자동 채우기 (사진 분석)"}
+          {autoFilling ? "🪄 분석 중..." : "🪄 AI 자동 채우기 (주제·키워드·느낀 점 2~3줄·비교 제안)"}
         </button>
         {!hasStaticImage && (
           <p className="text-xs text-gray-400">정적 이미지(JPEG/PNG/WebP)를 먼저 업로드하세요.</p>
