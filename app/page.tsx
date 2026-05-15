@@ -54,14 +54,14 @@ export default function Home() {
         if (code === "auth_failed") {
           setError(
             detail ||
-              "Anthropic API 키를 확인해 주세요. Vercel 환경 변수 ANTHROPIC_API_KEY에 console.anthropic.com 에서 발급한 키(sk-ant-)를 넣고 재배포하세요."
+              "OPENROUTER_API_KEY(https://openrouter.ai) 또는 Anthropic용 ANTHROPIC_API_KEY 중 하나를 서버에 설정하고 재배포하세요."
           );
           return;
         }
         if (code === "no_api_key") {
           setError(
             detail ||
-              "서버에 ANTHROPIC_API_KEY 가 설정되어 있지 않습니다."
+              "OPENROUTER_API_KEY(https://openrouter.ai) 또는 Anthropic용 ANTHROPIC_API_KEY 중 하나가 서버에 필요합니다."
           );
           return;
         }
@@ -74,8 +74,14 @@ export default function Home() {
         setError("요청이 너무 빠릅니다. 10초 후 다시 시도해주세요.");
       } else if (msg.includes("JSON 파싱") || msg.includes("parse_failed")) {
         setError("AI 응답을 읽지 못했습니다. 다시 시도해주세요.");
-      } else if (msg.includes("ANTHROPIC_API_KEY") || msg.includes("no_api_key")) {
-        setError("서버에 ANTHROPIC_API_KEY 가 설정되어 있지 않습니다 (.env.local).");
+      } else if (
+        msg.includes("ANTHROPIC_API_KEY") ||
+        msg.includes("no_api_key") ||
+        msg.includes("OPENROUTER_API_KEY")
+      ) {
+        setError(
+          "OPENROUTER_API_KEY(https://openrouter.ai) 또는 Anthropic용 ANTHROPIC_API_KEY가 서버에 없습니다. Vercel 환경 변수를 확인하세요."
+        );
       } else if (msg.includes("Failed to fetch") || msg.includes("413")) {
         setError("사진 용량이 커서 전송에 실패했습니다. 2~3장 줄여 다시 시도해주세요.");
       } else {
@@ -161,7 +167,7 @@ export default function Home() {
     <main className="mx-auto max-w-2xl px-4 py-8 pb-16 sm:px-6">
       <h1 className="mb-1 text-2xl font-black text-gray-900">네이버 블로그 자동 작성</h1>
       <p className="mb-2 text-sm leading-relaxed text-gray-500">
-        세차·디테일링 전문가용 초안 생성 · 모바일/PC 브라우저 · 선택 검색(TAVILY_API_KEY)
+        세차·디테일링 전문가용 초안 생성 · OpenRouter 또는 Anthropic 직통 · 선택 검색(TAVILY_API_KEY)
       </p>
       <p className="mb-6 text-xs leading-relaxed text-gray-500">
         생성 후{" "}

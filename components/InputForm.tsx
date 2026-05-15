@@ -196,12 +196,12 @@ export default function InputForm({ onSubmit, loading }: Props) {
         } else if (err.error === "no_api_key") {
           setAutoFillError(
             detail ||
-              ".env.local 에 ANTHROPIC_API_KEY 를 설정하고 서버를 재시작해 주세요."
+              "OPENROUTER_API_KEY 또는 ANTHROPIC_API_KEY가 서버에 없습니다. .env.local 또는 Vercel 환경 변수를 확인하세요."
           );
         } else if (err.error === "auth_failed") {
           setAutoFillError(
             detail ||
-              "Anthropic API 키를 확인해 주세요. Vercel 환경 변수 ANTHROPIC_API_KEY에 console.anthropic.com 에서 발급한 키(sk-ant-)를 넣고 재배포하세요."
+              "API 키를 확인해 주세요. OpenRouter를 쓰면 Vercel에 OPENROUTER_API_KEY(sk-or-v1-)를 넣고 재배포하세요. Anthropic 직통이면 ANTHROPIC_API_KEY(sk-ant-)를 사용하세요."
           );
         } else {
           setAutoFillError(

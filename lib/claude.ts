@@ -12,6 +12,45 @@ import {
   type AiBlogJson,
 } from "./blogSchema";
 
+export const AI_PROVIDER_API_KEY_MISSING = "AI_PROVIDER_API_KEY_MISSING";
+
+type ProviderKind = "openrouter" | "anthropic";
+
+/** OpenRouter 게이트웨이는 프롬프트 캐시 필드를 허용하지 않는 경우가 많아 생략 */
+type SystemPromptBlock = {
+  type: "text";
+  text: string;
+  cache_control?: { type: "ephemeral" };
+};
+
+function normalizeSecret(raw: string | undefined): string | null {
+  if (raw === undefined) return null;
+  let s = raw.replace(/\uFEFF/g, "").trim();
+  if (
+    (s.startsWith('"') && s.endsWith('"')) ||
+    (s.startsWith("'") && s.endsWith("'"))
+  ) {
+    s = s.slice(1, -1).trim();
+  }
+  return s.length > 0 ? s : null;
+}
+
+function normalizeOpenRouterReferer(url: string | undefined): string {
+  const t = normalizeSecret(url);
+  if (t?.startsWith("http://") || t?.startsWith("https://")) return t;
+  if (t) return `https://${t}`;
+  const v = normalizeSecret(process.env.VERCEL_URL);
+  return v ? (v.startsWith("http") ? v : `https://${v}`) : "http://localhost:3000";
+}
+
+function systemForProvider(
+  provider: ProviderKind,
+  blocks: SystemPromptBlock[],
+): Anthropic.Messages.MessageCreateParamsNonStreaming["system"] {
+  if (provider !== "openrouter") return blocks;
+  return blocks.map(({ text }) => ({ type: "text" as const, text }));
+}
+
 export type VisionMediaType = "image/jpeg" | "image/png" | "image/webp";
 
 export interface ImagePlan {
@@ -51,34 +90,58 @@ type VisionContentBlock =
   | { type: "text"; text: string }
   | { type: "image"; source: { type: "base64"; media_type: VisionMediaType; data: string } };
 
-function normalizeSecret(raw: string | undefined): string | null {
-  if (raw === undefined) return null;
-  let s = raw.replace(/\uFEFF/g, "").trim();
-  if (
-    (s.startsWith('"') && s.endsWith('"')) ||
-    (s.startsWith("'") && s.endsWith("'"))
-  ) {
-    s = s.slice(1, -1).trim();
+function getMessagingRuntime(): {
+  client: Anthropic;
+  provider: ProviderKind;
+  modelAutofill: string;
+  modelBlog: string;
+} {
+  const orKey = normalizeSecret(process.env.OPENROUTER_API_KEY);
+  if (orKey) {
+    const referer = normalizeOpenRouterReferer(
+      process.env.OPENROUTER_HTTP_REFERER ?? process.env.VERCEL_URL,
+    );
+    const title =
+      normalizeSecret(process.env.OPENROUTER_APP_TITLE) ?? "Naver Blog Automator";
+    const baseModel =
+      normalizeSecret(process.env.OPENROUTER_MODEL) ?? "anthropic/claude-sonnet-4";
+    const modelAutofill =
+      normalizeSecret(process.env.OPENROUTER_MODEL_AUTOFILL) ?? baseModel;
+    const modelBlog =
+      normalizeSecret(process.env.OPENROUTER_MODEL_BLOG) ?? baseModel;
+    return {
+      provider: "openrouter",
+      client: new Anthropic({
+        apiKey: orKey,
+        baseURL: "https://openrouter.ai/api/v1",
+        defaultHeaders: {
+          "HTTP-Referer": referer,
+          "X-Title": title,
+        },
+      }),
+      modelAutofill,
+      modelBlog,
+    };
   }
-  return s.length > 0 ? s : null;
-}
 
-function anthropicOfficial(): Anthropic {
-  const apiKey = normalizeSecret(process.env.ANTHROPIC_API_KEY);
-  if (!apiKey) {
-    throw new Error("ANTHROPIC_API_KEY가 설정되지 않았습니다.");
+  const anKey = normalizeSecret(process.env.ANTHROPIC_API_KEY);
+  if (!anKey) {
+    throw new Error(AI_PROVIDER_API_KEY_MISSING);
   }
-  if (/^sk-or-v1-/i.test(apiKey)) {
+  if (/^sk-or-v1-/i.test(anKey)) {
     throw new Error(OPENROUTER_KEY_IN_ANTHROPIC_SLOT);
   }
-  return new Anthropic({
-    apiKey,
-    baseURL: "https://api.anthropic.com",
-  });
-}
-
-function getClient(): Anthropic {
-  return anthropicOfficial();
+  const defaultAn = "claude-sonnet-4-6";
+  return {
+    provider: "anthropic",
+    client: new Anthropic({
+      apiKey: anKey,
+      baseURL: "https://api.anthropic.com",
+    }),
+    modelAutofill:
+      normalizeSecret(process.env.ANTHROPIC_MODEL_AUTOFILL) ?? defaultAn,
+    modelBlog: normalizeSecret(process.env.ANTHROPIC_MODEL_BLOG) ?? defaultAn,
+  };
 }
 
 const AUTOFILL_SYSTEM_PROMPT = `당신은 세차·디테일링 전문가용 네이버 블로그 입력폼을 채우는 도우미입니다.
@@ -178,10 +241,13 @@ ${nonImageFilenames.join(", ") || "없음"}
   }
   content.push({ type: "text", text: promptText });
 
-  const response = await getClient().messages.create({
-    model: "claude-sonnet-4-6",
+  const rt = getMessagingRuntime();
+  const response = await rt.client.messages.create({
+    model: rt.modelAutofill,
     max_tokens: 1200,
-    system: [{ type: "text", text: AUTOFILL_SYSTEM_PROMPT, cache_control: { type: "ephemeral" } }],
+    system: systemForProvider(rt.provider, [
+      { type: "text", text: AUTOFILL_SYSTEM_PROMPT, cache_control: { type: "ephemeral" } },
+    ]),
     messages: [{ role: "user", content }],
   });
 
@@ -246,16 +312,13 @@ ${jsonSchemaInstructions()}
 `,
   });
 
-  const response = await getClient().messages.create({
-    model: "claude-sonnet-4-6",
+  const rt = getMessagingRuntime();
+  const response = await rt.client.messages.create({
+    model: rt.modelBlog,
     max_tokens: 8192,
-    system: [
-      {
-        type: "text",
-        text: systemBase,
-        cache_control: { type: "ephemeral" },
-      },
-    ],
+    system: systemForProvider(rt.provider, [
+      { type: "text", text: systemBase, cache_control: { type: "ephemeral" } },
+    ]),
     messages: [{ role: "user", content: interleaved }],
   });
 

@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { anthropicEnvAuthResponse } from "@/lib/anthropicErrors";
-import { analyzeImagesForAutoFill, type VisionMediaType } from "@/lib/claude";
+import { analyzeImagesForAutoFill, AI_PROVIDER_API_KEY_MISSING, type VisionMediaType } from "@/lib/claude";
 import { throttle, getIp } from "@/lib/throttle";
 
 export const runtime = "nodejs";
@@ -62,12 +62,14 @@ export async function POST(req: NextRequest) {
     if (authRes) return authRes;
 
     const msg = e instanceof Error ? e.message : "unknown";
-    if (msg.includes("ANTHROPIC_API_KEY")) {
+    if (
+      msg.includes(AI_PROVIDER_API_KEY_MISSING)
+    ) {
       return NextResponse.json(
         {
           error: "no_api_key",
           detail:
-            "서버에 ANTHROPIC_API_KEY 가 없습니다. 프로젝트 폴더에 .env.local 파일을 만들고 ANTHROPIC_API_KEY=your_key 를 넣은 뒤 개발 서버를 다시 실행하세요.",
+            "OPENROUTER_API_KEY(https://openrouter.ai 발급) 또는 Anthropic 전용 ANTHROPIC_API_KEY 중 하나가 필요합니다. Vercel 환경 변수에 넣고 재배포하거나 로컬은 .env.local 을 만드세요.",
         },
         { status: 503 }
       );
@@ -78,7 +80,7 @@ export async function POST(req: NextRequest) {
       status === 502 ? "parse_failed" : msg.includes("401") ? "auth_failed" : "analyze_failed";
     const detail =
       code === "auth_failed"
-        ? "API 인증 오류입니다. Vercel의 ANTHROPIC_API_KEY(Anthropic 콘솔에서 발급한 sk-ant- 키)를 확인 후 재배포하세요."
+        ? "API 인증 오류입니다. OPENROUTER_API_KEY(sk-or-v1-) 또는 Anthropic 직통 ANTHROPIC_API_KEY(sk-ant-) 값·크레딧을 확인하고 재배포하세요."
         : msg;
     return NextResponse.json({ error: code, detail }, { status });
   }
