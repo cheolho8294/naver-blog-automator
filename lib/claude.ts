@@ -1,6 +1,7 @@
 import Anthropic from "@anthropic-ai/sdk";
 import { OPENROUTER_KEY_IN_ANTHROPIC_SLOT } from "./anthropicErrors";
 import { loadUtf8FromRoot } from "./promptLoader";
+import { openRouterChatCompletion } from "./openrouter";
 import type { ResearchHit } from "./research";
 import {
   jsonSchemaInstructions,
@@ -13,15 +14,6 @@ import {
 } from "./blogSchema";
 
 export const AI_PROVIDER_API_KEY_MISSING = "AI_PROVIDER_API_KEY_MISSING";
-
-type ProviderKind = "openrouter" | "anthropic";
-
-/** OpenRouter 게이트웨이는 프롬프트 캐시 필드를 허용하지 않는 경우가 많아 생략 */
-type SystemPromptBlock = {
-  type: "text";
-  text: string;
-  cache_control?: { type: "ephemeral" };
-};
 
 function normalizeSecret(raw: string | undefined): string | null {
   if (raw === undefined) return null;
@@ -41,14 +33,6 @@ function normalizeOpenRouterReferer(url: string | undefined): string {
   if (t) return `https://${t}`;
   const v = normalizeSecret(process.env.VERCEL_URL);
   return v ? (v.startsWith("http") ? v : `https://${v}`) : "http://localhost:3000";
-}
-
-function systemForProvider(
-  provider: ProviderKind,
-  blocks: SystemPromptBlock[],
-): Anthropic.Messages.MessageCreateParamsNonStreaming["system"] {
-  if (provider !== "openrouter") return blocks;
-  return blocks.map(({ text }) => ({ type: "text" as const, text }));
 }
 
 export type VisionMediaType = "image/jpeg" | "image/png" | "image/webp";
@@ -90,12 +74,23 @@ type VisionContentBlock =
   | { type: "text"; text: string }
   | { type: "image"; source: { type: "base64"; media_type: VisionMediaType; data: string } };
 
-function getMessagingRuntime(): {
-  client: Anthropic;
-  provider: ProviderKind;
-  modelAutofill: string;
-  modelBlog: string;
-} {
+type MessagingRuntime =
+  | {
+      provider: "openrouter";
+      apiKey: string;
+      referer: string;
+      title: string;
+      modelAutofill: string;
+      modelBlog: string;
+    }
+  | {
+      provider: "anthropic";
+      client: Anthropic;
+      modelAutofill: string;
+      modelBlog: string;
+    };
+
+function getMessagingRuntime(): MessagingRuntime {
   const orKey = normalizeSecret(process.env.OPENROUTER_API_KEY);
   if (orKey) {
     const referer = normalizeOpenRouterReferer(
@@ -111,14 +106,9 @@ function getMessagingRuntime(): {
       normalizeSecret(process.env.OPENROUTER_MODEL_BLOG) ?? baseModel;
     return {
       provider: "openrouter",
-      client: new Anthropic({
-        apiKey: orKey,
-        baseURL: "https://openrouter.ai/api/v1",
-        defaultHeaders: {
-          "HTTP-Referer": referer,
-          "X-Title": title,
-        },
-      }),
+      apiKey: orKey,
+      referer,
+      title,
       modelAutofill,
       modelBlog,
     };
@@ -142,6 +132,40 @@ function getMessagingRuntime(): {
       normalizeSecret(process.env.ANTHROPIC_MODEL_AUTOFILL) ?? defaultAn,
     modelBlog: normalizeSecret(process.env.ANTHROPIC_MODEL_BLOG) ?? defaultAn,
   };
+}
+
+async function invokeVisionCompletion(params: {
+  rt: MessagingRuntime;
+  model: string;
+  systemText: string;
+  userBlocks: VisionContentBlock[];
+  maxTokens: number;
+}): Promise<string> {
+  const { rt, model, systemText, userBlocks, maxTokens } = params;
+  if (rt.provider === "openrouter") {
+    return openRouterChatCompletion({
+      apiKey: rt.apiKey,
+      referer: rt.referer,
+      title: rt.title,
+      model,
+      system: systemText,
+      userBlocks,
+      maxTokens,
+    });
+  }
+  const response = await rt.client.messages.create({
+    model,
+    max_tokens: maxTokens,
+    system: [
+      {
+        type: "text",
+        text: systemText,
+        cache_control: { type: "ephemeral" },
+      },
+    ],
+    messages: [{ role: "user", content: userBlocks }],
+  });
+  return response.content[0]?.type === "text" ? response.content[0].text : "";
 }
 
 const AUTOFILL_SYSTEM_PROMPT = `당신은 세차·디테일링 전문가용 네이버 블로그 입력폼을 채우는 도우미입니다.
@@ -242,16 +266,13 @@ ${nonImageFilenames.join(", ") || "없음"}
   content.push({ type: "text", text: promptText });
 
   const rt = getMessagingRuntime();
-  const response = await rt.client.messages.create({
+  const text = await invokeVisionCompletion({
+    rt,
     model: rt.modelAutofill,
-    max_tokens: 1200,
-    system: systemForProvider(rt.provider, [
-      { type: "text", text: AUTOFILL_SYSTEM_PROMPT, cache_control: { type: "ephemeral" } },
-    ]),
-    messages: [{ role: "user", content }],
+    systemText: AUTOFILL_SYSTEM_PROMPT,
+    userBlocks: content,
+    maxTokens: 1200,
   });
-
-  const text = response.content[0]?.type === "text" ? response.content[0].text : "";
   const raw = extractJsonObject(text);
   const parsed = JSON.parse(raw) as AutoFillResult;
   return parsed;
@@ -313,16 +334,13 @@ ${jsonSchemaInstructions()}
   });
 
   const rt = getMessagingRuntime();
-  const response = await rt.client.messages.create({
+  const text = await invokeVisionCompletion({
+    rt,
     model: rt.modelBlog,
-    max_tokens: 8192,
-    system: systemForProvider(rt.provider, [
-      { type: "text", text: systemBase, cache_control: { type: "ephemeral" } },
-    ]),
-    messages: [{ role: "user", content: interleaved }],
+    systemText: systemBase,
+    userBlocks: interleaved,
+    maxTokens: 8192,
   });
-
-  const text = response.content[0]?.type === "text" ? response.content[0].text : "";
   let data: AiBlogJson;
   try {
     data = parseAiBlogJson(JSON.parse(extractJsonObject(text)));
