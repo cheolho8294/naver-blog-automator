@@ -64,10 +64,15 @@ export const aiBlogJsonSchema = z.object({
 
 export type AiBlogJson = z.infer<typeof aiBlogJsonSchema>;
 
+/** 제목·요약·소제목·본문 등 합산(태그 포함), 공백·[Gn]·HTML 태그 제외 */
+export const MIN_BLOG_BODY_CHARS = 1200;
+
 const GROUP_MARKER_RE = /\[G\d+\]/g;
 
 export function stripForCharCount(s: string): string {
-  return s.replace(GROUP_MARKER_RE, "").replace(/\s/g, "");
+  const noMarkers = s.replace(GROUP_MARKER_RE, "");
+  const noHtml = noMarkers.replace(/<[^>]*>/g, "");
+  return noHtml.replace(/\s/g, "");
 }
 
 /** 모바일 기준: 한 덩어리(빈 줄로 구분)가 과도하게 길지 않게 */
@@ -130,6 +135,9 @@ export function validatePhotoSelectionBand(
 export function totalKoreanCharCount(data: AiBlogJson): number {
   let t = "";
   t += data.title + data.introSummary + data.comparisonBlock;
+  for (const tag of data.tags) {
+    t += tag;
+  }
   for (const s of data.sections) {
     t += s.heading + s.body + (s.tableHtml ?? "");
   }
@@ -225,7 +233,9 @@ export function jsonSchemaInstructions(): string {
     "- imagePlan: 각 groupId별 ordered 행 개수는 반드시 2 또는 4 (2열·2×2 콜라주용).",
     "- 업로드가 8장 이상이면 ordered 장수는 8~13(업로드보다 적으면 min) 중 짝수만 가능하다(2·4장 묶음 합).",
     "- tableHtml은 근거가 있을 때만. 없으면 빈 문자열.",
-    "- 공백 제외 한글 본문 합계 1500자 이상(마커·HTML 태그 제외).",
+    "- 공백·HTML 태그·[Gn] 마커 제외 문자 합계(제목·요약·tags·본문·FAQ 등) 최소 **" +
+      MIN_BLOG_BODY_CHARS +
+      "자** 미만이면 응답이 거부된다. 각 sections[].body는 단락을 여러 개 두어 분량 확보.",
     "- originalIndex는 업로드 미디어 목록의 실제 인덱스이며, 프롬프트에 제시된 허용 값만 사용.",
   ].join("\n");
 }

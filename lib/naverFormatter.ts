@@ -126,6 +126,7 @@ export function countChars(post: BlogPost): number {
   const stripped = [
     post.title,
     post.introSummary ?? "",
+    (post.tags ?? []).join(""),
     ...post.sections.map(
       (s) =>
         s.heading +

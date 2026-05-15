@@ -2,6 +2,7 @@
 import { useState, useMemo } from "react";
 import InputForm from "@/components/InputForm";
 import type { BlogPostWithImages } from "@/lib/claude";
+import { MIN_BLOG_BODY_CHARS } from "@/lib/blogSchema";
 import { formatForNaver, countChars } from "@/lib/naverFormatter";
 import CopyButton from "@/components/CopyButton";
 import OrderedImageList from "@/components/OrderedImageList";
@@ -192,10 +193,11 @@ export default function Home() {
           <div className="flex flex-wrap items-center justify-between gap-2">
             <span
               className={`text-sm font-bold ${
-                charCount >= 1500 ? "text-green-600" : "text-red-500"
+                charCount >= MIN_BLOG_BODY_CHARS ? "text-green-600" : "text-red-500"
               }`}
             >
-              {charCount.toLocaleString()}자 {charCount >= 1500 ? "✓" : "(1500자 미만)"}
+              {charCount.toLocaleString()}자{" "}
+              {charCount >= MIN_BLOG_BODY_CHARS ? "✓" : `(${MIN_BLOG_BODY_CHARS}자 미만)`}
             </span>
             <div className="flex flex-wrap items-center gap-2">
               {post.researchUsed && (
