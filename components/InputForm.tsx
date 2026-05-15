@@ -200,7 +200,8 @@ export default function InputForm({ onSubmit, loading }: Props) {
           );
         } else if (err.error === "auth_failed") {
           setAutoFillError(
-            detail || "API 키가 거부되었습니다. 키·결제·모델 권한을 확인해 주세요."
+            detail ||
+              "Anthropic API 키를 확인해 주세요. Vercel 환경 변수 ANTHROPIC_API_KEY에 console.anthropic.com 에서 발급한 키(sk-ant-)를 넣고 재배포하세요."
           );
         } else {
           setAutoFillError(

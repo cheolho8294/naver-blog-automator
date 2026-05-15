@@ -51,6 +51,20 @@ export default function Home() {
         const detail =
           typeof payload.detail === "string" ? payload.detail : "";
         const code = typeof payload.error === "string" ? payload.error : "";
+        if (code === "auth_failed") {
+          setError(
+            detail ||
+              "Anthropic API 키를 확인해 주세요. Vercel 환경 변수 ANTHROPIC_API_KEY에 console.anthropic.com 에서 발급한 키(sk-ant-)를 넣고 재배포하세요."
+          );
+          return;
+        }
+        if (code === "no_api_key") {
+          setError(
+            detail ||
+              "서버에 ANTHROPIC_API_KEY 가 설정되어 있지 않습니다."
+          );
+          return;
+        }
         throw new Error(detail || code || "생성 실패");
       }
       setPost(payload as GeneratedPost);

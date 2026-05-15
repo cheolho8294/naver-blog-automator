@@ -1,4 +1,5 @@
 import Anthropic from "@anthropic-ai/sdk";
+import { OPENROUTER_KEY_IN_ANTHROPIC_SLOT } from "./anthropicErrors";
 import { loadUtf8FromRoot } from "./promptLoader";
 import type { ResearchHit } from "./research";
 import {
@@ -50,10 +51,25 @@ type VisionContentBlock =
   | { type: "text"; text: string }
   | { type: "image"; source: { type: "base64"; media_type: VisionMediaType; data: string } };
 
+function normalizeSecret(raw: string | undefined): string | null {
+  if (raw === undefined) return null;
+  let s = raw.replace(/\uFEFF/g, "").trim();
+  if (
+    (s.startsWith('"') && s.endsWith('"')) ||
+    (s.startsWith("'") && s.endsWith("'"))
+  ) {
+    s = s.slice(1, -1).trim();
+  }
+  return s.length > 0 ? s : null;
+}
+
 function anthropicOfficial(): Anthropic {
-  const apiKey = process.env.ANTHROPIC_API_KEY?.trim();
+  const apiKey = normalizeSecret(process.env.ANTHROPIC_API_KEY);
   if (!apiKey) {
     throw new Error("ANTHROPIC_API_KEY가 설정되지 않았습니다.");
+  }
+  if (/^sk-or-v1-/i.test(apiKey)) {
+    throw new Error(OPENROUTER_KEY_IN_ANTHROPIC_SLOT);
   }
   return new Anthropic({
     apiKey,

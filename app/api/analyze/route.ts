@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { anthropicEnvAuthResponse } from "@/lib/anthropicErrors";
 import { analyzeImagesForAutoFill, type VisionMediaType } from "@/lib/claude";
 import { throttle, getIp } from "@/lib/throttle";
 
@@ -57,6 +58,9 @@ export async function POST(req: NextRequest) {
     });
     return NextResponse.json(result);
   } catch (e) {
+    const authRes = anthropicEnvAuthResponse(e);
+    if (authRes) return authRes;
+
     const msg = e instanceof Error ? e.message : "unknown";
     if (msg.includes("ANTHROPIC_API_KEY")) {
       return NextResponse.json(
@@ -72,6 +76,10 @@ export async function POST(req: NextRequest) {
       msg.includes("JSON 파싱") || msg.includes("자동 채우기 JSON") ? 502 : 500;
     const code =
       status === 502 ? "parse_failed" : msg.includes("401") ? "auth_failed" : "analyze_failed";
-    return NextResponse.json({ error: code, detail: msg }, { status });
+    const detail =
+      code === "auth_failed"
+        ? "API 인증 오류입니다. Vercel의 ANTHROPIC_API_KEY(Anthropic 콘솔에서 발급한 sk-ant- 키)를 확인 후 재배포하세요."
+        : msg;
+    return NextResponse.json({ error: code, detail }, { status });
   }
 }
