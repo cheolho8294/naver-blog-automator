@@ -26,6 +26,7 @@ export default function Home() {
     topic: string;
     keywords: string;
     notes: string;
+    workerMemo: string;
     comparison: string;
     media: MediaFile[];
     preparedImages: { dataUrl: string; mimeType: string; originalIndex: number; caption?: string }[];
@@ -42,6 +43,7 @@ export default function Home() {
             topic: data.topic,
             keywords: data.keywords,
             notes: data.notes,
+            workerMemo: data.workerMemo,
             comparison: data.comparison,
           },
           images: data.preparedImages,

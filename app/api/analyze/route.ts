@@ -24,13 +24,14 @@ export async function POST(req: NextRequest) {
     } = body as {
       images?: { dataUrl: string; mimeType: string; filename: string; caption?: string }[];
       nonImageFilenames?: string[];
-      prefilled?: { topic?: string; keywords?: string; notes?: string; comparison?: string };
+      prefilled?: { topic?: string; keywords?: string; notes?: string; workerMemo?: string; comparison?: string };
     };
 
     const prefilled = {
       topic: prefilledRaw?.topic ?? "",
       keywords: prefilledRaw?.keywords ?? "",
       notes: prefilledRaw?.notes ?? "",
+      workerMemo: prefilledRaw?.workerMemo ?? "",
       comparison: prefilledRaw?.comparison ?? "",
     };
 

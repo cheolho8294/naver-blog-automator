@@ -13,6 +13,7 @@ interface FormData {
   topic: string;
   keywords: string;
   notes: string;
+  workerMemo: string;
   comparison: string;
   media: MediaFile[];
   preparedImages: { dataUrl: string; mimeType: string; originalIndex: number; caption?: string }[];
@@ -48,7 +49,7 @@ function fileToDataUrl(file: File): Promise<string> {
 }
 
 export default function InputForm({ onSubmit, loading }: Props) {
-  const [form, setForm] = useState({ topic: "", keywords: "", notes: "", comparison: "" });
+  const [form, setForm] = useState({ topic: "", keywords: "", notes: "", workerMemo: "", comparison: "" });
   const [media, setMedia] = useState<MediaFile[]>([]);
   const [autoFilling, setAutoFilling] = useState(false);
   const [autoFillError, setAutoFillError] = useState("");
@@ -216,6 +217,7 @@ export default function InputForm({ onSubmit, loading }: Props) {
         topic: f.topic || r.topic || "",
         keywords: f.keywords || r.keywords || "",
         notes: f.notes || r.notes || "",
+        workerMemo: f.workerMemo,
         comparison: f.comparison || r.comparison || "",
       }));
       if (warnings.length > 0) setAutoFillWarning(warnings.join(" "));
@@ -315,6 +317,17 @@ export default function InputForm({ onSubmit, loading }: Props) {
           placeholder="예: 패드를 바꿀 때 열이 너무 올라가지 않게 속도를 줄였습니다. AI 자동 채우기 시 여기가 2~3줄로 제안됩니다."
           value={form.notes}
           onChange={(e) => setForm({ ...form, notes: e.target.value })}
+        />
+      </div>
+
+      <div>
+        <label className="mb-1 block text-sm font-semibold text-gray-700">작업자 메모</label>
+        <p className="mb-1 text-xs text-gray-500">차종·특이사항·사용약제 등 현장 정보 — 글 작성 시 사실 근거로 반영됩니다.</p>
+        <textarea
+          className={`${inputCls} min-h-[100px] resize-none`}
+          placeholder={"예:\n차종: 스타리아 2023\n특이사항: PPF 전면부, 무광 휠\n사용약제: APC pH7, 철분제 XX, 세라믹 XX"}
+          value={form.workerMemo}
+          onChange={(e) => setForm({ ...form, workerMemo: e.target.value })}
         />
       </div>
 

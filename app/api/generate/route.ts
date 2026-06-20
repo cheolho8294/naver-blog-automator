@@ -23,7 +23,7 @@ export async function POST(req: NextRequest) {
   try {
     const body = await req.json();
     const { form, images } = body as {
-      form: { topic: string; keywords: string; notes: string; comparison: string };
+      form: { topic: string; keywords: string; notes: string; workerMemo: string; comparison: string };
       images: { dataUrl: string; mimeType: string; originalIndex: number; caption?: string }[];
     };
 
